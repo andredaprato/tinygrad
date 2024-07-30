@@ -304,6 +304,9 @@ constant_folder = PatternMatcher([
   (NOp.load(NOp.var(), NOp.var(), NOp.const(dtypes.bool, False), NOp.cvar("var"), NOp.var()), lambda var: var),
   (NOp.store(NOp.var("buf"), NOp.var("idx"), NOp.var("val"), NOp.const(dtypes.bool, True)), UOp.store),
   (NOp.store(NOp.var(), NOp.var(), NOp.var(), NOp.const(dtypes.bool, False)), lambda: UOp(UOps.NOOP)),
+  # rewrite gated store as store with IF
+  (NOp(UOps.STORE, src=(NOp.var(), NOp.var(), NOp.var(), NOp.var(dtype=dtypes.bool),), name="store"),
+   lambda store: UOp(store.op, store.dtype, store.src[:-1]+(UOp(UOps.IF, None, (store.src[-1],)),), store.arg)),
   # remove NOOPs from SINK
   (NOp(UOps.SINK, name="root"),
     lambda root: UOp(UOps.SINK, root.dtype, a, root.arg) if len(a:=tuple(x for x in root.src if x.op is not UOps.NOOP)) != len(root.src) else None),

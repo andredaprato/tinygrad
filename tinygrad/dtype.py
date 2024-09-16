@@ -1,3 +1,5 @@
+from __future__ import annotations
+from functools import total_ordering
 from typing import Final, Optional, ClassVar, Set, Tuple, Dict, Union
 from dataclasses import dataclass
 import functools
@@ -5,7 +7,8 @@ from tinygrad.helpers import getenv
 
 ConstType = Union[float, int, bool]
 
-@dataclass(frozen=True, order=True)
+@total_ordering
+@dataclass(frozen=True, order=False)
 class DType:
   priority: int  # this determines when things get upcasted
   itemsize: int
@@ -14,9 +17,12 @@ class DType:
   count: int
   def __repr__(self): return f"dtypes.{'_'*(c:=self.count!=1)}{INVERSE_DTYPES_DICT[self.name if not c else self.scalar().name]}{str(self.count)*c}"
   def vec(self, sz:int):
-    assert sz > 1 and self.count == 1, f"can't vectorize {self} with size {sz}"
+    assert self.count == 1, f"can't vectorize {self} with size {sz}"
+    if sz == 1 or self.name == 'void': return self  # void doesn't vectorize, and sz=1 is scalar
     return DType(self.priority, self.itemsize*sz, f"{INVERSE_DTYPES_DICT[self.name]}{sz}", None, sz)
   def scalar(self): return DTYPES_DICT[self.name[:-len(str(self.count))]] if self.count > 1 else self
+  def __eq__(self, x): return (self.priority, self.itemsize, self.name, self.fmt, self.count) == (x.priority, x.itemsize, x.name, x.fmt, x.count)
+  def __lt__(self, x): return (self.priority, self.itemsize, self.name, self.fmt, self.count) < (x.priority, x.itemsize, x.name, x.fmt, x.count)
 
 # dependent typing?
 @dataclass(frozen=True, repr=False)
@@ -27,12 +33,9 @@ class ImageDType(DType):
   def vec(self, sz:int): return self.base.vec(sz)
   def __repr__(self): return f"dtypes.{self.name}({self.shape})"
 
-# @dataclass(frozen=True, init=False, repr=False, eq=False)
 class PtrDType(DType):
   def __init__(self, dt:DType): super().__init__(dt.priority, dt.itemsize, dt.name, dt.fmt, dt.count)
   def __hash__(self): return super().__hash__()
-  def __eq__(self, dt): return self.priority==dt.priority and self.itemsize==dt.itemsize and self.name==dt.name and self.count==dt.count
-  def __ne__(self, dt): return not (self == dt)
   def __repr__(self): return f"PtrDType({super().__repr__()})"
 
 class dtypes:
@@ -54,12 +57,18 @@ class dtypes:
     if x.__class__ is list or x.__class__ is tuple: return max(dtypes.from_py(xi) for xi in x) if x else dtypes.default_float
     raise RuntimeError(f"Could not infer dtype of {x} with type {type(x)}")
   @staticmethod
-  def as_const(val: ConstType, dtype:DType): return int(val) if dtypes.is_int(dtype) else float(val) if dtypes.is_float(dtype) else bool(val)
+  def as_const(val: Tuple[ConstType, ...]|ConstType, dtype:DType):
+    if isinstance(val, tuple):
+      assert len(val) == dtype.count, f"mismatch {val} {dtype}"
+      return tuple(dtypes.as_const(x, dtype) for x in val)
+    return int(val) if dtypes.is_int(dtype) else float(val) if dtypes.is_float(dtype) else bool(val)
   @staticmethod
+  @functools.lru_cache(None)
   def min(dtype:DType):
     if dtypes.is_int(dtype): return 0 if dtypes.is_unsigned(dtype) else -2**(dtype.itemsize*8-1)
     return -float("inf") if dtypes.is_float(dtype) else False
   @staticmethod
+  @functools.lru_cache(None)
   def max(dtype:DType):
     if dtypes.is_int(dtype): return (2**(dtype.itemsize*8-(0 if dtypes.is_unsigned(dtype) else 1)))-1
     return float("inf") if dtypes.is_float(dtype) else True
@@ -70,6 +79,7 @@ class dtypes:
   @staticmethod
   def fields() -> Dict[str, DType]: return DTYPES_DICT
   # TODO: priority should be higher than bool
+  void: Final[DType] = DType(-1, 0, "void", None, 1)
   pyint: Final[DType] = DType(-1, 8, "pyint", None, 1)   # arbitrary precision integer, same itemsize to int64 so min/max works
   bool: Final[DType] = DType(0, 1, "bool", '?', 1)
   int8: Final[DType] = DType(1, 1, "char", 'b', 1)
@@ -123,9 +133,9 @@ def least_upper_dtype(*ds:DType) -> DType:
 def least_upper_float(dt:DType) -> DType: return dt if dtypes.is_float(dt) else least_upper_dtype(dt, dtypes.float32)
 
 # HACK: staticmethods are not callable in 3.8 so we have to compare the class
-DTYPES_DICT = {k: v for k, v in dtypes.__dict__.items() if not (k.startswith(('__', 'default', 'pyint')) or v.__class__ is staticmethod)}
+DTYPES_DICT = {k: v for k, v in dtypes.__dict__.items() if not (k.startswith(('__', 'default', 'void')) or v.__class__ is staticmethod)}
 INVERSE_DTYPES_DICT = {v.name:k for k,v in DTYPES_DICT.items()}
-INVERSE_DTYPES_DICT['pyint'] = 'pyint'
+INVERSE_DTYPES_DICT['void'] = 'void'
 
 def sum_acc_dtype(dt:DType):
   # default acc dtype for sum

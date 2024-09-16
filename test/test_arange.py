@@ -31,7 +31,9 @@ class TestArange(unittest.TestCase):
     assert (f1 < 5000 and f2 < 5000) or (f2 / f1 < 15), f"bad complexity, flops {f2/f1:.1f}X while inputs 10X"
 
   def test_complexity_w_upcast(self): return self.test_complexity([Opt(OptOps.UPCAST, 0, 4)])
-  def test_complexity_w_unroll(self): return self.test_complexity([Opt(OptOps.UNROLL, 0, 4)])
+  def test_complexity_w_unroll2(self): return self.test_complexity([Opt(OptOps.UNROLL, 0, 2)])
+  def test_complexity_w_unroll4(self): return self.test_complexity([Opt(OptOps.UNROLL, 0, 4)])
+  def test_complexity_w_unroll8(self): return self.test_complexity([Opt(OptOps.UNROLL, 0, 8)])
   def test_complexity_w_upcast_and_unroll(self): return self.test_complexity([Opt(OptOps.UPCAST, 0, 4), Opt(OptOps.UNROLL, 0, 4)])
 
   @unittest.skip("doesn't work yet")
@@ -133,6 +135,7 @@ class TestIndexing(unittest.TestCase):
       np.testing.assert_equal(X.numpy(), 0)
 
   @unittest.skipIf(getenv("PTX"), "broken on ptx for some reason")
+  @unittest.skipIf(getenv("WEBGPU"), "MNIST uses uint8")
   def test_index_mnist(self, noopt=1, op_limit=512*784*5):
     from tinygrad.nn.datasets import mnist
     X_train, Y_train, _, _ = mnist()
@@ -148,6 +151,7 @@ class TestIndexing(unittest.TestCase):
   def test_index_mnist_opt(self): self.test_index_mnist(0)
 
   @unittest.skipIf(getenv("PTX"), "broken on ptx for some reason")
+  @unittest.skipIf(getenv("WEBGPU"), "Buffers too larger for WEBGPU")
   def test_llama_embedding(self, noopt=1, op_limit=65536):
     # llama3 is 128256
     vocab_size, embed_size = (10, 3) if CI else (32000, 4096)
@@ -168,6 +172,7 @@ class TestIndexing(unittest.TestCase):
       # TODO: reshape to match torch, should we do this in nn?
       np.testing.assert_allclose(z.numpy().reshape(4, embed_size), torch_z.detach().numpy(), atol=1e-8, rtol=1e-8)
   # at least the arange is being fused
+  @unittest.skipIf(getenv("WEBGPU"), "Buffers too larger for WEBGPU")
   def test_llama_embedding_opt(self): self.test_llama_embedding(0, 1_736_704_000 if CI else 5_898_240_000)
 
 if __name__ == "__main__":

@@ -13,7 +13,7 @@ from tinygrad.shape.view import View
 
 class InvalidASTException(Exception): pass
 def helper_test_verify_ast(*stores:UOp) -> Kernel:
-  sink = UOp(UOps.SINK, None, stores)
+  sink = UOp(UOps.SINK, dtypes.void, stores)
   if DEBUG >= 3:
     for op in stores: print(op)
   try: verify_ast(sink)

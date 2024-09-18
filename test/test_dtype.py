@@ -318,6 +318,14 @@ class TestEqStrDType(unittest.TestCase):
     assert PtrDType(dtypes.float32) == PtrDType(dtypes.float32)
     assert not (PtrDType(dtypes.float32) != PtrDType(dtypes.float32))
     #assert PtrDType(dtypes.float32) != dtypes.float32
+  def test_dtype_cmp(self):
+    assert dtypes.bool < dtypes.int8
+    assert dtypes.float32.vec(2) > dtypes.float32
+    assert PtrDType(dtypes.float32) > dtypes.float16
+    assert PtrDType(dtypes.float32) >= dtypes.float32
+    assert dtypes.imageh((1,1)) > dtypes.float64
+    assert dtypes.imagef((1,1)) > dtypes.float64
+
   def test_strs(self):
     if PtrDType is None: raise unittest.SkipTest("no PtrDType support")
     self.assertEqual(str(dtypes.imagef((1,2,4))), "dtypes.imagef((1, 2, 4))")

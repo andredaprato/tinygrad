@@ -6,7 +6,8 @@ from tinygrad import Tensor, Device, dtypes
 from tinygrad.ops import UOp, UOps
 from tinygrad.shape.shapetracker import ShapeTracker
 from tinygrad.tensor import _to_np_dtype
-from tinygrad.engine.realize import Runner
+from tinygrad.engine.realize import Runner, lower_schedule_item
+from tinygrad.engine.schedule import create_schedule
 from tinygrad.dtype import ConstType, DType
 from tinygrad.nn.state import get_parameters
 from tinygrad.helpers import Context, CI, OSX, getenv
@@ -72,3 +73,8 @@ def timeit(fxn:Callable[..., T], *args, **kwargs) -> Tuple[T, float]:
   st = time.perf_counter_ns()
   ret = fxn(*args, **kwargs)
   return ret, (time.perf_counter_ns()-st)*1e-6
+
+def get_stats(x:Tensor):
+  si = create_schedule([x.lazydata])[-1]
+  ei = lower_schedule_item(si)
+  return ei.prg.op_estimate, ei.prg.mem_estimate
